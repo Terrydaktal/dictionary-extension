@@ -1,6 +1,6 @@
 /*
  * Prevent KWin's Scale/Fade effects from painting the provisional geometry
- * Firefox assigns before the DictAI positioner applies Wayland coordinates.
+ * the browser assigns before the DictAI positioner applies Wayland coordinates.
  */
 
 "use strict";
@@ -43,8 +43,13 @@ function isDictAiStagingWindow(window) {
         window.windowClass || window.resourceClass || ""
     ).toLowerCase();
     const size = frameSize(window);
+    const isSupportedBrowser =
+        windowClass.includes("firefox") ||
+        windowClass.includes("google-chrome") ||
+        windowClass.includes("chromium") ||
+        windowClass.includes("chrome");
     return (
-        windowClass.includes("firefox") &&
+        isSupportedBrowser &&
         Math.abs(size.width - stagingWidth) <= 2 &&
         size.height >= stagingHeight - 2 &&
         size.height <= maximumStagingFrameHeight
@@ -59,7 +64,7 @@ function isDictAiPopup(window) {
         return true;
     }
 
-    // Firefox publishes the extension title after the native surface is
+    // The browser publishes the extension title after the native surface is
     // mapped. These distinctive staging dimensions identify it early enough
     // to cancel Scale/Fade before their first compositor paint.
     return isDictAiStagingWindow(window);

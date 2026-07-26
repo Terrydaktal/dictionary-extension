@@ -116,6 +116,10 @@ function cleanDefinition(text) {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
   cleaned = cleaned
+    // AI Mode's rendered text can append citation chips as two plain-text
+    // lines, such as "Synametrics" followed by "+4". They are UI metadata,
+    // not part of the generated answer.
+    .replace(/(^|\n)[^\n]{1,120}\n\s*\+\d+\s*(?=\n|$)/g, '$1')
     .replace(
       /\n(?:To help (?:me|you)|Would you like|Let me know if|Do you want me to)[\s\S]*$/i,
       ''
@@ -134,7 +138,15 @@ function normalizeComparable(text) {
 }
 
 function definitionPrompt(word) {
-  return `Define "${word}" concisely: part of speech, meaning, base word if inflected, and one example. Plain text.`;
+  return [
+    `What is "${word}"?`,
+    'First identify what the term most likely refers to instead of assuming it is an ordinary word or verb.',
+    'It may be a dictionary word or inflection, but it may instead be a proper name, product, software package, company, acronym, technical concept, place, title, or other named entity.',
+    'For an ordinary word, answer in two to four sentences with its part of speech, concise meaning, genuine base form if inflected, and one natural example.',
+    'For a named entity, product, or concept, answer in two to five sentences that identify it directly and explain its maker or users when relevant, main purpose, and key distinction. Omit part-of-speech, base-word, and invented example fields.',
+    'If the term is genuinely ambiguous, give the most likely meaning first and list at most two other common meanings.',
+    'Use concise plain text without headings, citations, source labels, or follow-up offers. Do not invent an inflection or grammatical meaning.',
+  ].join(' ');
 }
 
 function isExtensionOrigin(origin) {

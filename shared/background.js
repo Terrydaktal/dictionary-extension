@@ -6,7 +6,13 @@
  * Fully compatible with both Firefox (Promise-based messaging) and Chrome (Service Worker).
  */
 
-const extAPI = typeof browser !== 'undefined' ? browser : chrome;
+// Chrome 148 exposes a `browser` alias too, so checking only for the global
+// selects the wrong API implementation there. getBrowserInfo is Firefox-only.
+const isFirefox =
+  typeof browser !== 'undefined' &&
+  browser.runtime &&
+  typeof browser.runtime.getBrowserInfo === 'function';
+const extAPI = isFirefox ? browser : chrome;
 
 // Default settings configuration
 const DEFAULT_SETTINGS = {
@@ -37,9 +43,10 @@ const WIKTIONARY_FETCH_TIMEOUT_MS = 7000;
 const AI_FETCH_TIMEOUT_MS = 90000;
 const AI_FALLBACK_URL = 'http://127.0.0.1:9235/v1/define';
 // Deliberately distinctive staging geometry lets KWin identify and hide the
-// native Wayland surface before Firefox has published its title.
+// native Wayland surface before the browser has published its page title.
 const NATIVE_STAGING_WIDTH = 137;
 const NATIVE_STAGING_HEIGHT = 139;
+const MAX_STANDALONE_POPUP_HEIGHT = 450;
 let persistentCacheWrites = 0;
 let wordIndexPromise = null;
 
@@ -183,7 +190,12 @@ extAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const word = message.word ? message.word.trim().toLowerCase() : 'dictionary';
     const provider = normalizeProvider(message.provider);
     const width = Number.isFinite(message.width) ? Math.round(message.width) : 480;
-    const height = Number.isFinite(message.height) ? Math.round(message.height) : 520;
+    const height = Math.min(
+      MAX_STANDALONE_POPUP_HEIGHT,
+      Number.isFinite(message.height)
+        ? Math.round(message.height)
+        : MAX_STANDALONE_POPUP_HEIGHT
+    );
     const left = Number.isFinite(message.left) ? Math.round(message.left) : 100;
     const top = Number.isFinite(message.top) ? Math.round(message.top) : 100;
     const relativeLeft = Number.isFinite(message.relativeLeft)
@@ -204,6 +216,7 @@ extAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const cursorOffsetY = Number.isFinite(message.cursorOffsetY)
       ? Math.round(message.cursorOffsetY)
       : 18;
+    const verticalAnchor = message.verticalAnchor === 'bottom' ? 'bottom' : 'top';
     const popupParams = new URLSearchParams({
       word,
       positionX: String(left),
@@ -216,14 +229,11 @@ extAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
       viewportInsetY: String(viewportInsetY),
       cursorOffsetX: String(cursorOffsetX),
       cursorOffsetY: String(cursorOffsetY),
+      verticalAnchor,
       provider,
       hidePopupHeader: String(message.hidePopupHeader === true)
     });
     const popupUrl = extAPI.runtime.getURL(`popup_frame.html?${popupParams}`);
-    const nativePositionMarker =
-      `[DICTAI_POPUP|${left}|${top}|${width}|${height}` +
-      `|${relativeLeft}|${relativeTop}|${viewportInsetX}|${viewportInsetY}` +
-      `|${cursorOffsetX}|${cursorOffsetY}] `;
 
     // Ensure the fetch is running even if pointer-based speculation was not
     // available on the source page. Do not delay creation of the local window.
@@ -240,11 +250,7 @@ extAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
       height: NATIVE_STAGING_HEIGHT,
       left,
       top,
-      focused: false,
-      // Supplying the complete geometry in the native title prefix lets KWin
-      // position the surface while the window is first being managed, before
-      // popup_frame.js or the definition page has loaded.
-      titlePreface: nativePositionMarker
+      focused: false
     };
 
     const promise = extAPI.windows.create(windowConfig)

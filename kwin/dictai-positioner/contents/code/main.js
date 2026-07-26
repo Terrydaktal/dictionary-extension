@@ -9,23 +9,31 @@
 const trackedWindows = new Map();
 const dictAiWindows = new Set();
 const positionedWindows = new Set();
+const autoFitAnchors = new Map();
+const initialAutoFitAnchors = new Map();
 const hiddenMarker = /\[DICTAI_HIDDEN\]/;
+const autoFitMarker = /\[DICTAI_AUTOFIT\|(top|bottom)\]/;
 const positionMarker =
-    /\[DICTAI_POPUP\|(-?\d+)\|(-?\d+)\|(\d+)\|(\d+)\|(-?\d+)\|(-?\d+)\|(\d+)\|(\d+)\|(-?\d+)\|(-?\d+)\]/;
+    /\[DICTAI_POPUP\|(-?\d+)\|(-?\d+)\|(\d+)\|(\d+)\|(-?\d+)\|(-?\d+)\|(\d+)\|(\d+)\|(-?\d+)\|(-?\d+)(?:\|(top|bottom))?\]/;
 const stagingWidth = 137;
 const stagingHeight = 139;
 const maximumStagingFrameHeight = stagingHeight + 64;
 let lastNonDictAiActiveWindow = workspace.activeWindow || null;
 
-function isFirefoxWindow(window) {
+function isSupportedBrowserWindow(window) {
     const resourceClass = String(
         (window && window.resourceClass) || ""
     ).toLowerCase();
-    return resourceClass.includes("firefox");
+    return (
+        resourceClass.includes("firefox") ||
+        resourceClass.includes("google-chrome") ||
+        resourceClass.includes("chromium") ||
+        resourceClass.includes("chrome")
+    );
 }
 
 function isDictAiStagingWindow(window) {
-    if (!window || !isFirefoxWindow(window)) {
+    if (!window || !isSupportedBrowserWindow(window)) {
         return false;
     }
     const geometry = window.frameGeometry;
@@ -45,6 +53,52 @@ function isDictAiWindow(window) {
     return Boolean(
         window && (dictAiWindows.has(window) || hasDictAiMarker(window))
     );
+}
+
+function syncAutoFitAnchor(window) {
+    const match = autoFitMarker.exec(String((window && window.caption) || ""));
+    if (!match) {
+        autoFitAnchors.delete(window);
+        return;
+    }
+    if (autoFitAnchors.has(window)) {
+        return;
+    }
+
+    const geometry = window.frameGeometry;
+    const initialAnchor = initialAutoFitAnchors.get(window);
+    autoFitAnchors.set(
+        window,
+        initialAnchor && initialAnchor.edge === match[1]
+            ? initialAnchor
+            : {
+                edge: match[1],
+                coordinate:
+                    match[1] === "bottom"
+                        ? geometry.y + geometry.height
+                        : geometry.y
+            }
+    );
+    initialAutoFitAnchors.delete(window);
+}
+
+function preserveAutoFitAnchor(window) {
+    const anchor = autoFitAnchors.get(window);
+    if (!anchor || !positionedWindows.has(window)) {
+        return;
+    }
+
+    const geometry = Object.assign({}, window.frameGeometry);
+    const targetY =
+        anchor.edge === "bottom"
+            ? anchor.coordinate - geometry.height
+            : anchor.coordinate;
+    if (Math.abs(geometry.y - targetY) < 1) {
+        return;
+    }
+
+    geometry.y = targetY;
+    window.frameGeometry = geometry;
 }
 
 function pointCoordinate(point, property) {
@@ -82,6 +136,8 @@ function positionDictAiWindow(window, capturedSourceWindow, capturedCursor) {
     const viewportInsetY = Number(match[8]);
     const cursorOffsetX = Number(match[9]);
     const cursorOffsetY = Number(match[10]);
+    const verticalAnchor =
+        match[11] || (cursorOffsetY < 0 ? "bottom" : "top");
 
     if (
         !Number.isFinite(x) ||
@@ -153,6 +209,16 @@ function positionDictAiWindow(window, capturedSourceWindow, capturedCursor) {
     geometry.y = targetY;
     geometry.width = Math.max(240, width);
     geometry.height = Math.max(180, height);
+    // The browser may request its first content-fit resize immediately after
+    // this placement. Preserve the exact selected-word edge instead of
+    // recapturing an already-resized frame from a later caption event.
+    initialAutoFitAnchors.set(window, {
+        edge: verticalAnchor,
+        coordinate:
+            verticalAnchor === "bottom"
+                ? targetY + geometry.height
+                : targetY
+    });
     // Mark it before assigning frameGeometry because that assignment can emit
     // frameGeometryChanged synchronously. Placement is intentionally one-shot
     // so the user can freely move the resulting independent window.
@@ -171,8 +237,8 @@ function positionDictAiWindow(window, capturedSourceWindow, capturedCursor) {
 
 function handleDictAiWindow(window, capturedSourceWindow, capturedCursor) {
     const caption = String(window.caption || "");
-    // titlePreface remains in Firefox's native title, so the final geometry
-    // marker must take precedence over the initial hidden marker.
+    // The final geometry marker must take precedence over the initial hidden
+    // marker while the popup document is starting.
     if (positionMarker.test(caption)) {
         dictAiWindows.add(window);
         if (positionedWindows.has(window)) {
@@ -224,9 +290,11 @@ function watchWindow(window) {
         y: pointCoordinate(cursorPosition, "y")
     };
     const captionHandler = function () {
+        syncAutoFitAnchor(window);
         handleDictAiWindow(window, sourceWindow, capturedCursor);
     };
     const geometryHandler = function () {
+        preserveAutoFitAnchor(window);
         handleDictAiWindow(window, sourceWindow, capturedCursor);
     };
 
@@ -237,7 +305,7 @@ function watchWindow(window) {
         geometryHandler
     });
     if (stagedAsDictAi) {
-        // The staging dimensions are available at windowAdded, before Firefox
+        // The staging dimensions are available at windowAdded, before the browser
         // publishes any title. Suppress this provisional centred surface; the
         // title marker will shortly provide the final size and coordinates.
         dictAiWindows.add(window);
@@ -254,9 +322,12 @@ function watchWindow(window) {
             trackedWindows.delete(window);
             dictAiWindows.delete(window);
             positionedWindows.delete(window);
+            autoFitAnchors.delete(window);
+            initialAutoFitAnchors.delete(window);
         });
     }
 
+    syncAutoFitAnchor(window);
     handleDictAiWindow(window, sourceWindow, capturedCursor);
 }
 

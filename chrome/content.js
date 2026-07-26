@@ -8,8 +8,13 @@
 (function () {
   'use strict';
 
-  const isFirefox = typeof browser !== 'undefined' && typeof browser.runtime !== 'undefined';
+  const isFirefox =
+    typeof browser !== 'undefined' &&
+    browser.runtime &&
+    typeof browser.runtime.getBrowserInfo === 'function';
   const extAPI = isFirefox ? browser : chrome;
+  const MAX_STANDALONE_POPUP_HEIGHT = 450;
+  const STANDALONE_POPUP_WORD_GAP = 12;
 
   // Extension State
   let shadowHost = null;
@@ -243,7 +248,9 @@
    */
   async function openSeparateWindowBelowWord(word, rect, clickPosition, mouseEvent) {
     const popupWidth = settings.popupWidth || 480;
-    const popupHeight = settings.popupHeight || 520;
+    // Position against the largest possible auto-fit size so a definition that
+    // expands after loading still remains inside the Wayland work area.
+    const popupHeight = MAX_STANDALONE_POPUP_HEIGHT;
 
     let wordScreenX;
     let wordScreenTop;
@@ -294,7 +301,9 @@
     }
 
     let winLeft = Math.round(wordScreenX - (popupWidth / 2));
-    let winTop = Math.round(wordScreenBottom + 8);
+    let winTop = Math.round(
+      wordScreenBottom + STANDALONE_POPUP_WORD_GAP
+    );
 
     const screenLeft = window.screen.availLeft || 0;
     const screenTop = window.screen.availTop || 0;
@@ -308,14 +317,19 @@
       Math.min(relativeLeft, window.innerWidth - popupWidth - viewportPadding)
     );
 
-    let relativeTop = Math.round(rect.bottom + 8);
+    let relativeTop = Math.round(
+      rect.bottom + STANDALONE_POPUP_WORD_GAP
+    );
     if (relativeTop + popupHeight > window.innerHeight - viewportPadding) {
-      relativeTop = Math.round(rect.top - popupHeight - 8);
+      relativeTop = Math.round(
+        rect.top - popupHeight - STANDALONE_POPUP_WORD_GAP
+      );
     }
     relativeTop = Math.max(
       viewportPadding,
       Math.min(relativeTop, window.innerHeight - popupHeight - viewportPadding)
     );
+    const verticalAnchor = relativeTop < rect.top ? 'bottom' : 'top';
 
     const cursorOffsetX =
       clickPosition && Number.isFinite(clickPosition.clientX)
@@ -341,7 +355,9 @@
     winLeft = Math.max(screenLeft + 10, Math.min(winLeft, screenLeft + screenWidth - popupWidth - 10));
 
     if (winTop + popupHeight > screenTop + screenHeight - 15) {
-      winTop = Math.round(wordScreenTop - popupHeight - 8);
+      winTop = Math.round(
+        wordScreenTop - popupHeight - STANDALONE_POPUP_WORD_GAP
+      );
     }
     winTop = Math.max(screenTop + 10, winTop);
 
@@ -358,6 +374,7 @@
       viewportInsetY,
       cursorOffsetX,
       cursorOffsetY,
+      verticalAnchor,
       provider: settings.dictionaryProvider,
       hidePopupHeader: settings.hidePopupHeader === true
     });

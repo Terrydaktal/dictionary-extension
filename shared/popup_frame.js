@@ -5,7 +5,12 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-  const extAPI = typeof browser !== 'undefined' ? browser : chrome;
+  const isFirefox =
+    typeof browser !== 'undefined' &&
+    browser.runtime &&
+    typeof browser.runtime.getBrowserInfo === 'function';
+  const extAPI = isFirefox ? browser : chrome;
+  const MAX_POPUP_OUTER_HEIGHT = 450;
 
   const params = new URLSearchParams(window.location.search);
   const initialWord = (params.get('word') || 'dictionary').toLowerCase();
@@ -22,8 +27,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const viewportInsetY = Number.parseInt(params.get('viewportInsetY'), 10);
   const cursorOffsetX = Number.parseInt(params.get('cursorOffsetX'), 10);
   const cursorOffsetY = Number.parseInt(params.get('cursorOffsetY'), 10);
-  let normalWindowTitle = `${initialWord} - ${providerName} Definition`;
+  const verticalAnchor =
+    params.get('verticalAnchor') === 'bottom' ? 'bottom' : 'top';
+  let normalWindowTitle = initialWord;
   let positionMarkerActive = false;
+  let autoFitMarkerActive = false;
+  let autoFitSequence = 0;
 
   document.body.classList.toggle('popup-header-hidden', hidePopupHeader);
 
@@ -34,6 +43,11 @@ document.addEventListener('DOMContentLoaded', () => {
           'popup-header-hidden',
           changes.hidePopupHeader.newValue === true
         );
+        requestAnimationFrame(() => {
+          if (lastMeasuredContentHeight > 0) {
+            fitWindowToContent(lastMeasuredContentHeight);
+          }
+        });
       }
     });
   } catch (_) {
@@ -59,11 +73,29 @@ document.addEventListener('DOMContentLoaded', () => {
     document.title =
       `[DICTAI_POPUP|${positionX}|${positionY}|${windowWidth}|${windowHeight}` +
       `|${relativeX}|${relativeY}|${viewportInsetX}|${viewportInsetY}` +
-      `|${cursorOffsetX}|${cursorOffsetY}] ${initialWord}`;
-    setTimeout(() => {
+      `|${cursorOffsetX}|${cursorOffsetY}|${verticalAnchor}] ${initialWord}`;
+
+    let markerTimeout;
+    const clearPositionMarker = () => {
+      if (!positionMarkerActive) return;
       positionMarkerActive = false;
-      document.title = normalWindowTitle;
-    }, 400);
+      clearTimeout(markerTimeout);
+      window.removeEventListener('resize', clearMarkerWhenPositioned);
+      if (!autoFitMarkerActive) {
+        document.title = normalWindowTitle;
+      }
+    };
+    const clearMarkerWhenPositioned = () => {
+      if (
+        Math.abs(window.outerWidth - windowWidth) <= 2 &&
+        Math.abs(window.outerHeight - windowHeight) <= 2
+      ) {
+        clearPositionMarker();
+      }
+    };
+    window.addEventListener('resize', clearMarkerWhenPositioned);
+    markerTimeout = setTimeout(clearPositionMarker, 400);
+    requestAnimationFrame(clearMarkerWhenPositioned);
   }
 
   const wordBadge = document.getElementById('word-badge');
@@ -81,9 +113,128 @@ document.addEventListener('DOMContentLoaded', () => {
   const errorMessage = document.getElementById('error-message');
   const errorLink = document.getElementById('error-link');
   const retryButton = document.getElementById('retry-button');
+  const windowHeader = document.querySelector('.window-header');
   let currentWord = initialWord;
   let currentChatId = '';
   let loadSequence = 0;
+  let lastMeasuredContentHeight = 0;
+
+  function updateCurrentWindowHeight(height) {
+    if (isFirefox) {
+      return browser.windows
+        .getCurrent()
+        .then((currentWindow) =>
+          currentWindow && Number.isInteger(currentWindow.id)
+            ? browser.windows.update(currentWindow.id, { height })
+            : null
+        )
+        .catch(() => null);
+    }
+
+    return new Promise((resolve) => {
+      try {
+        chrome.windows.getCurrent({}, (currentWindow) => {
+          if (
+            chrome.runtime.lastError ||
+            !currentWindow ||
+            !Number.isInteger(currentWindow.id)
+          ) {
+            resolve(null);
+            return;
+          }
+          chrome.windows.update(currentWindow.id, { height }, (updatedWindow) => {
+            void chrome.runtime.lastError;
+            resolve(updatedWindow || null);
+          });
+        });
+      } catch (_) {
+        resolve(null);
+      }
+    });
+  }
+
+  async function fitWindowToContent(contentHeight) {
+    if (!Number.isFinite(contentHeight) || contentHeight <= 0) return;
+    lastMeasuredContentHeight = Math.ceil(contentHeight);
+
+    const headerHeight =
+      windowHeader && getComputedStyle(windowHeader).display !== 'none'
+        ? Math.ceil(windowHeader.getBoundingClientRect().height)
+        : 0;
+    const nativeFrameHeight = Math.max(
+      0,
+      Math.round(window.outerHeight - window.innerHeight)
+    );
+    const targetHeight = Math.min(
+      MAX_POPUP_OUTER_HEIGHT,
+      Math.ceil(nativeFrameHeight + headerHeight + lastMeasuredContentHeight)
+    );
+    if (Math.abs(window.outerHeight - targetHeight) < 2) return;
+
+    const sequence = ++autoFitSequence;
+    autoFitMarkerActive = true;
+    document.title =
+      `[DICTAI_AUTOFIT|${verticalAnchor}] ${normalWindowTitle}`;
+    // Let the native title reach KWin before the browser applies the geometry
+    // update; otherwise frameGeometryChanged can race ahead of captionChanged.
+    await new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
+    if (sequence !== autoFitSequence) return;
+    await updateCurrentWindowHeight(targetHeight);
+    setTimeout(() => {
+      if (sequence !== autoFitSequence) return;
+      autoFitMarkerActive = false;
+      if (!positionMarkerActive) {
+        document.title = normalWindowTitle;
+      }
+    }, 120);
+  }
+
+  function measureFrameDocument(frameDocument) {
+    const previousHeight = frameContent.style.height;
+    frameContent.style.height = '1px';
+    const measuredHeight = Math.max(
+      frameDocument.body ? frameDocument.body.scrollHeight : 0,
+      frameDocument.documentElement
+        ? frameDocument.documentElement.scrollHeight
+        : 0
+    );
+    frameContent.style.height = previousHeight;
+    return measuredHeight;
+  }
+
+  function measureElementContent(element) {
+    const previous = {
+      height: element.style.height,
+      overflowY: element.style.overflowY,
+      position: element.style.position,
+      top: element.style.top,
+      right: element.style.right,
+      bottom: element.style.bottom,
+      left: element.style.left
+    };
+    element.style.height = 'auto';
+    element.style.overflowY = 'visible';
+    if (getComputedStyle(element).position === 'absolute') {
+      element.style.position = 'static';
+      element.style.top = 'auto';
+      element.style.right = 'auto';
+      element.style.bottom = 'auto';
+      element.style.left = 'auto';
+    }
+    const measuredHeight = element.scrollHeight;
+    Object.assign(element.style, previous);
+    return measuredHeight;
+  }
+
+  function scheduleElementFit(element) {
+    requestAnimationFrame(() => {
+      if (getComputedStyle(element).display !== 'none') {
+        fitWindowToContent(measureElementContent(element));
+      }
+    });
+  }
 
   frameContent.addEventListener('load', () => {
     try {
@@ -109,6 +260,19 @@ document.addEventListener('DOMContentLoaded', () => {
         event.clipboardData.setData('text/plain', currentWord);
         event.preventDefault();
       }, true);
+
+      const fitFrame = () => {
+        if (getComputedStyle(frameContent).display !== 'none') {
+          fitWindowToContent(measureFrameDocument(frameDocument));
+        }
+      };
+      requestAnimationFrame(fitFrame);
+      if (frameDocument.fonts && frameDocument.fonts.ready) {
+        frameDocument.fonts.ready.then(fitFrame).catch(() => {});
+      }
+      frameDocument.querySelectorAll('img').forEach((image) => {
+        if (!image.complete) image.addEventListener('load', fitFrame, { once: true });
+      });
     } catch (_) {
       // srcdoc is same-origin, but native copying remains available if access fails.
     }
@@ -165,6 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
     errorLink.href = externalUrl;
     errorLink.textContent = externalLabel;
     errorView.style.display = 'flex';
+    scheduleElementFit(errorView);
   }
 
   async function loadWordDefinition(word) {
@@ -177,8 +342,8 @@ document.addEventListener('DOMContentLoaded', () => {
     );
 
     // Update UI title and header
-    normalWindowTitle = `${cleanWord} - ${providerName} Definition`;
-    if (!positionMarkerActive) {
+    normalWindowTitle = cleanWord;
+    if (!positionMarkerActive && !autoFitMarkerActive) {
       document.title = normalWindowTitle;
     }
     wordBadge.textContent = cleanWord;
@@ -334,6 +499,7 @@ document.addEventListener('DOMContentLoaded', () => {
       linkExternal.title = 'Open in Google AI Mode (new tab)';
       loader.style.display = 'none';
       aiContent.style.display = 'block';
+      scheduleElementFit(aiContent);
       return;
     }
 
