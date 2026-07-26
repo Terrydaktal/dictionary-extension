@@ -85,6 +85,17 @@ qdbus6 org.kde.KWin /Effects \
 qdbus6 org.kde.KWin /Effects \
 	org.kde.kwin.Effects.loadEffect \
 	"${effect_id}" >/dev/null
+
+effect_loaded="$(
+	qdbus6 org.kde.KWin /Effects \
+		org.kde.kwin.Effects.isEffectLoaded \
+		"${effect_id}"
+)"
+if [[ "${effect_loaded}" != "true" ]]; then
+	printf 'Failed to load the DictAI KWin popup guard effect.\n' >&2
+	exit 1
+fi
+
 qdbus6 org.kde.KWin /KWin org.kde.KWin.reconfigure
 
 printf 'Installed and started the DictAI KWin popup compositor helpers.\n'

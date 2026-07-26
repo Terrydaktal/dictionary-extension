@@ -16,6 +16,7 @@ const positionMarker =
     /\[DICTAI_POPUP\|(-?\d+)\|(-?\d+)\|(\d+)\|(\d+)\|(-?\d+)\|(-?\d+)\|(\d+)\|(\d+)\|(-?\d+)\|(-?\d+)\]/;
 const stagingWidth = 137;
 const stagingHeight = 139;
+const maximumStagingFrameHeight = stagingHeight + 64;
 let lastNonDictAiActiveWindow = workspace.activeWindow || null;
 
 function isFirefoxWindow(window) {
@@ -32,7 +33,8 @@ function isDictAiStagingWindow(window) {
     const geometry = window.frameGeometry;
     return (
         Math.abs(geometry.width - stagingWidth) <= 2 &&
-        Math.abs(geometry.height - stagingHeight) <= 2
+        geometry.height >= stagingHeight - 2 &&
+        geometry.height <= maximumStagingFrameHeight
     );
 }
 
