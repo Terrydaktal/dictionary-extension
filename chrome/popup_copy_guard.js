@@ -1,17 +1,20 @@
 /*
- * Install the copy handler as early as possible in the standalone window.
- * KWin may briefly direct a key event to a newly mapped Wayland surface before
- * its no-focus rule restores the source window. If Ctrl+C lands here while
- * nothing in the definition is selected, copy the word that opened the window.
+ * Install the copy fallback as early as possible in the standalone window.
+ * A real selection always keeps native copy behavior. With nothing selected,
+ * Ctrl+C copies the word that opened the definition.
  */
 
 (() => {
-  const SETTLEMENT_PERIOD_MS = 400;
   const params = new URLSearchParams(window.location.search);
-  const selectedWord = (params.get('word') || '').trim();
-  if (!selectedWord) return;
+  let currentWord = (params.get('word') || '').trim();
+  if (!currentWord) return;
 
-  const handleInitialCopy = (event) => {
+  window.addEventListener('dictai-popup-word-changed', (event) => {
+    const nextWord = String(event.detail || '').trim();
+    if (nextWord) currentWord = nextWord;
+  });
+
+  const handleCopyFallback = (event) => {
     const activeElement = document.activeElement;
     // Definition documents render inside this iframe. Never replace a copy
     // originating from an actual definition selection.
@@ -37,14 +40,9 @@
       return;
     }
 
-    event.clipboardData.setData('text/plain', selectedWord);
+    event.clipboardData.setData('text/plain', currentWord);
     event.preventDefault();
   };
 
-  document.addEventListener('copy', handleInitialCopy, true);
-  document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-      document.removeEventListener('copy', handleInitialCopy, true);
-    }, SETTLEMENT_PERIOD_MS);
-  }, { once: true });
+  document.addEventListener('copy', handleCopyFallback, true);
 })();

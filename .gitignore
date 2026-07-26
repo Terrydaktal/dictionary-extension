@@ -11,3 +11,6 @@ __pycache__/
 node_modules/
 *.log
 .DS_Store
+
+# Browser-generated unpacked-extension artifacts
+chrome/_metadata/

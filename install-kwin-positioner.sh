@@ -12,14 +12,19 @@ data_root="${XDG_DATA_HOME:-${HOME}/.local/share}"
 installed_package_dir="${data_root}/kwin/scripts/${package_id}"
 installed_script="${data_root}/kwin/scripts/${package_id}/contents/code/main.js"
 installed_effect_dir="${data_root}/kwin/effects/${effect_id}"
+installed_effect_script="${installed_effect_dir}/contents/code/main.js"
 
-if kpackagetool6 --type KWin/Script --show "${package_id}" >/dev/null 2>&1; then
+if [[ "$(readlink -f -- "${installed_script}" 2>/dev/null || true)" == "$(readlink -f -- "${package_dir}/contents/code/main.js")" ]]; then
+	:
+elif kpackagetool6 --type KWin/Script --show "${package_id}" >/dev/null 2>&1; then
 	kpackagetool6 --type KWin/Script --upgrade "${package_dir}"
 else
 	kpackagetool6 --type KWin/Script --install "${package_dir}"
 fi
 
-if kpackagetool6 --type KWin/Effect --show "${effect_id}" >/dev/null 2>&1; then
+if [[ "$(readlink -f -- "${installed_effect_script}" 2>/dev/null || true)" == "$(readlink -f -- "${effect_dir}/contents/code/main.js")" ]]; then
+	:
+elif kpackagetool6 --type KWin/Effect --show "${effect_id}" >/dev/null 2>&1; then
 	kpackagetool6 --type KWin/Effect --upgrade "${effect_dir}"
 else
 	kpackagetool6 --type KWin/Effect --install "${effect_dir}"
@@ -49,38 +54,30 @@ kwriteconfig6 \
 	--key "${effect_id}Enabled" \
 	true
 
-# Native Wayland windows are automatically focused during their initial map.
-# A compositor rule is the only mechanism early enough to reject that focus
-# request, so the selected word remains owned by the source Firefox window.
-kwriteconfig6 --file kwinrulesrc --group "${rule_id}" \
-	--key Description "Keep focus on the source window for DictAI definitions"
-kwriteconfig6 --file kwinrulesrc --group "${rule_id}" \
-	--key title "[DICTAI_POPUP|"
-kwriteconfig6 --file kwinrulesrc --group "${rule_id}" \
-	--key titlematch 2
-kwriteconfig6 --file kwinrulesrc --group "${rule_id}" \
-	--key acceptfocus false
-kwriteconfig6 --file kwinrulesrc --group "${rule_id}" \
-	--key acceptfocusrule 2
-
+# The popup intentionally keeps normal keyboard focus. Remove the old
+# acceptfocus=false rule because it blocks copying selected definition text.
 existing_rules="$(
 	kreadconfig6 --file kwinrulesrc --group General --key rules
 )"
-case ",${existing_rules}," in
-*",${rule_id},"*) ;;
-*)
-	if [[ -n "${existing_rules}" ]]; then
-		updated_rules="${existing_rules},${rule_id}"
-	else
-		updated_rules="${rule_id}"
+filtered_rules=()
+IFS=',' read -r -a rule_entries <<<"${existing_rules}"
+for rule_entry in "${rule_entries[@]}"; do
+	if [[ -n "${rule_entry}" && "${rule_entry}" != "${rule_id}" ]]; then
+		filtered_rules+=("${rule_entry}")
 	fi
-	kwriteconfig6 --file kwinrulesrc --group General \
-		--key rules "${updated_rules}"
-	IFS=',' read -r -a rule_entries <<<"${updated_rules}"
-	kwriteconfig6 --file kwinrulesrc --group General \
-		--key count "${#rule_entries[@]}"
-	;;
-esac
+done
+updated_rules="$(
+	IFS=','
+	printf '%s' "${filtered_rules[*]}"
+)"
+kwriteconfig6 --file kwinrulesrc --group General \
+	--key rules "${updated_rules}"
+kwriteconfig6 --file kwinrulesrc --group General \
+	--key count "${#filtered_rules[@]}"
+for rule_key in Description title titlematch acceptfocus acceptfocusrule; do
+	kwriteconfig6 --file kwinrulesrc --group "${rule_id}" \
+		--key "${rule_key}" --delete ''
+done
 
 qdbus6 org.kde.KWin /Scripting \
 	org.kde.kwin.Scripting.unloadScript \

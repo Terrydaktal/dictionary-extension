@@ -9,8 +9,6 @@
 const trackedWindows = new Map();
 const dictAiWindows = new Set();
 const positionedWindows = new Set();
-const focusGuardWindows = new Set();
-const frameMarkerWindows = new Set();
 const hiddenMarker = /\[DICTAI_HIDDEN\]/;
 const positionMarker =
     /\[DICTAI_POPUP\|(-?\d+)\|(-?\d+)\|(\d+)\|(\d+)\|(-?\d+)\|(-?\d+)\|(\d+)\|(\d+)\|(-?\d+)\|(-?\d+)\]/;
@@ -47,29 +45,6 @@ function isDictAiWindow(window) {
     return Boolean(
         window && (dictAiWindows.has(window) || hasDictAiMarker(window))
     );
-}
-
-function restoreSourceFocus(window, sourceWindow) {
-    if (
-        !window ||
-        !sourceWindow ||
-        window === sourceWindow ||
-        !focusGuardWindows.has(window)
-    ) {
-        return;
-    }
-
-    try {
-        // windowActivated can be emitted just before activeWindow is updated,
-        // so checking the old activeWindow here races KWin's activation path.
-        workspace.activeWindow = sourceWindow;
-        // Keep the definition visible above its source without activating it.
-        workspace.raiseWindow(window);
-    } catch (error) {
-        console.warn(
-            "dictai-positioner: could not restore source focus: " + error
-        );
-    }
 }
 
 function pointCoordinate(point, property) {
@@ -170,7 +145,6 @@ function positionDictAiWindow(window, capturedSourceWindow, capturedCursor) {
         Math.abs(geometry.height - height) < 1
     ) {
         positionedWindows.add(window);
-        restoreSourceFocus(window, sourceWindow);
         window.opacity = 1;
         return true;
     }
@@ -184,7 +158,6 @@ function positionDictAiWindow(window, capturedSourceWindow, capturedCursor) {
     // so the user can freely move the resulting independent window.
     positionedWindows.add(window);
     window.frameGeometry = geometry;
-    restoreSourceFocus(window, sourceWindow);
     window.opacity = 1;
     console.info(
         "dictai-positioner: positioned popup at " +
@@ -203,25 +176,8 @@ function handleDictAiWindow(window, capturedSourceWindow, capturedCursor) {
     if (positionMarker.test(caption)) {
         dictAiWindows.add(window);
         if (positionedWindows.has(window)) {
-            const markerCount =
-                (caption.match(/\[DICTAI_POPUP\|/g) || []).length;
-            if (markerCount >= 2) {
-                frameMarkerWindows.add(window);
-            }
-            // The native prefix persists, while popup_frame.js removes its
-            // second marker after startup. End the focus guard at that point
-            // so later deliberate clicks can focus, move, and close the popup.
-            if (
-                frameMarkerWindows.has(window) &&
-                markerCount === 1 &&
-                !hiddenMarker.test(caption)
-            ) {
-                focusGuardWindows.delete(window);
-            }
-            restoreSourceFocus(window, capturedSourceWindow);
             return true;
         }
-        focusGuardWindows.add(window);
         return positionDictAiWindow(
             window,
             capturedSourceWindow,
@@ -233,7 +189,6 @@ function handleDictAiWindow(window, capturedSourceWindow, capturedCursor) {
         if (!positionedWindows.has(window)) {
             window.opacity = 0;
         }
-        restoreSourceFocus(window, capturedSourceWindow);
         return true;
     }
     return false;
@@ -286,7 +241,6 @@ function watchWindow(window) {
         // publishes any title. Suppress this provisional centred surface; the
         // title marker will shortly provide the final size and coordinates.
         dictAiWindows.add(window);
-        focusGuardWindows.add(window);
         window.opacity = 0;
     }
     if (window.captionChanged) {
@@ -300,8 +254,6 @@ function watchWindow(window) {
             trackedWindows.delete(window);
             dictAiWindows.delete(window);
             positionedWindows.delete(window);
-            focusGuardWindows.delete(window);
-            frameMarkerWindows.delete(window);
         });
     }
 
@@ -316,11 +268,6 @@ workspace.windowActivated.connect(function (window) {
     }
 
     if (isDictAiWindow(window)) {
-        const tracked = trackedWindows.get(window);
-        const sourceWindow =
-            (tracked && tracked.sourceWindow) ||
-            lastNonDictAiActiveWindow;
-        restoreSourceFocus(window, sourceWindow);
         return;
     }
 

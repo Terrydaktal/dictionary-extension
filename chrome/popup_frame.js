@@ -63,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
       positionMarkerActive = false;
       document.title = normalWindowTitle;
-    }, 1500);
+    }, 400);
   }
 
   const wordBadge = document.getElementById('word-badge');
@@ -84,6 +84,35 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentWord = initialWord;
   let currentChatId = '';
   let loadSequence = 0;
+
+  frameContent.addEventListener('load', () => {
+    try {
+      const frameDocument = frameContent.contentDocument;
+      if (!frameDocument) return;
+      frameDocument.addEventListener('copy', (event) => {
+        const selection = frameDocument.getSelection();
+        if (selection && !selection.isCollapsed) return;
+
+        const activeElement = frameDocument.activeElement;
+        if (
+          activeElement &&
+          (activeElement.tagName === 'INPUT' ||
+            activeElement.tagName === 'TEXTAREA') &&
+          Number.isInteger(activeElement.selectionStart) &&
+          Number.isInteger(activeElement.selectionEnd) &&
+          activeElement.selectionEnd > activeElement.selectionStart
+        ) {
+          return;
+        }
+        if (!event.clipboardData) return;
+
+        event.clipboardData.setData('text/plain', currentWord);
+        event.preventDefault();
+      }, true);
+    } catch (_) {
+      // srcdoc is same-origin, but native copying remains available if access fails.
+    }
+  });
 
   // Helper for cross-browser messaging
   async function sendMessageAsync(msg) {
@@ -143,6 +172,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const cleanWord = word.trim().toLowerCase();
     const sequence = ++loadSequence;
     currentWord = cleanWord;
+    window.dispatchEvent(
+      new CustomEvent('dictai-popup-word-changed', { detail: cleanWord })
+    );
 
     // Update UI title and header
     normalWindowTitle = `${cleanWord} - ${providerName} Definition`;
