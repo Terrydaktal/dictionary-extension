@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DictAI Dictionary Extension</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo-wrapper">
+          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="24" height="24" rx="6" fill="url(#brand-grad)"/>
+            <path d="M7 6H13C15.2091 6 17 7.79086 17 10C17 12.2091 15.2091 14 13 14H7V6Z" stroke="white" stroke-width="2" stroke-linejoin="round"/>
+            <path d="M7 6V18" stroke="white" stroke-width="2" stroke-linecap="round"/>
+            <defs>
+              <linearGradient id="brand-grad" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#4F46E5"/>
+                <stop offset="1" stop-color="#06B6D4"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>DictAI</h1>
+          <span class="subtitle">Floating Dictionary</span>
+        </div>
+      </div>
+      <div class="status-badge" id="status-badge">
+        <span class="dot"></span>
+        <span id="status-text">Active</span>
+      </div>
+    </header>
+
+    <!-- Search Section -->
+    <section class="search-section">
+      <form id="search-form" class="search-form">
+        <div class="input-wrapper">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="word-input" placeholder="Type word to lookup..." autocomplete="off">
+        </div>
+        <button type="submit" class="btn-primary" id="search-btn">Define</button>
+      </form>
+    </section>
+
+    <!-- Settings Card -->
+    <section class="settings-card">
+      <h2>Extension Settings</h2>
+
+      <!-- Enable Toggle -->
+      <div class="setting-item">
+        <div class="setting-info">
+          <label class="setting-title" for="toggle-enabled">Enable Dictionary</label>
+          <span class="setting-desc">Trigger popup on double-click</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggle-enabled" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <!-- Display Mode -->
+      <div class="setting-item">
+        <div class="setting-info">
+          <label class="setting-title" for="select-display-mode">Display Mode</label>
+          <span class="setting-desc">Popup format when double-clicking</span>
+        </div>
+        <select id="select-display-mode" class="custom-select">
+          <option value="in_page">In-Page Floating Card</option>
+          <option value="separate_window">Separate OS Window</option>
+        </select>
+      </div>
+
+      <!-- Dictionary Provider -->
+      <div class="setting-item">
+        <div class="setting-info">
+          <label class="setting-title" for="select-provider">Main Dictionary</label>
+          <span class="setting-desc">Source used after local lemmatization</span>
+        </div>
+        <select id="select-provider" class="custom-select">
+          <option value="dictai">DictAI</option>
+          <option value="wiktionary">Wiktionary (English)</option>
+        </select>
+      </div>
+
+      <!-- Trigger Mode -->
+      <div class="setting-item">
+        <div class="setting-info">
+          <label class="setting-title" for="select-trigger">Trigger Shortcut</label>
+          <span class="setting-desc">How to open popup on selected word</span>
+        </div>
+        <select id="select-trigger" class="custom-select">
+          <option value="dblclick">Double Click</option>
+          <option value="alt_dblclick">Alt + Double Click</option>
+        </select>
+      </div>
+
+      <!-- Theme Selector -->
+      <div class="setting-item">
+        <div class="setting-info">
+          <label class="setting-title" for="select-theme">Popup Theme</label>
+          <span class="setting-desc">Appearance of definition window</span>
+        </div>
+        <select id="select-theme" class="custom-select">
+          <option value="system">System Default</option>
+          <option value="light">Light Theme</option>
+          <option value="dark">Dark Theme</option>
+        </select>
+      </div>
+
+      <!-- Input Field Triggering -->
+      <div class="setting-item">
+        <div class="setting-info">
+          <label class="setting-title" for="toggle-inputs">Editable Text Fields</label>
+          <span class="setting-desc">Enable inside input forms/textareas</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggle-inputs">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <!-- Popup Dimensions -->
+      <div class="setting-item dimensions-item">
+        <div class="setting-info">
+          <label class="setting-title">Default Size</label>
+          <span class="setting-desc">Width & Height (pixels)</span>
+        </div>
+        <div class="dimension-inputs">
+          <input type="number" id="input-width" min="300" max="1000" value="480" title="Width">
+          <span>×</span>
+          <input type="number" id="input-height" min="300" max="1000" value="520" title="Height">
+        </div>
+      </div>
+    </section>
+
+    <!-- Usage Guide -->
+    <section class="guide-card">
+      <div class="guide-header">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="16" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        </svg>
+        <span>How to use</span>
+      </div>
+      <p>Double-click any word to open its definition from your selected dictionary. The 🗔 button detaches an in-page card into a separate window.</p>
+    </section>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <a href="https://www.dictai.org" target="_blank" rel="noopener">DictAI word index ↗</a>
+      <span>v1.0.0</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

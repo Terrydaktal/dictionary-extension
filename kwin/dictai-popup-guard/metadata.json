@@ -1,0 +1,13 @@
+{
+    "KPackageStructure": "KWin/Effect",
+    "KPlugin": {
+        "Category": "Window Open/Close Animation",
+        "Description": "Prevents opening animations from painting DictAI popups at their provisional Wayland geometry",
+        "EnabledByDefault": true,
+        "Id": "dictai-popup-guard",
+        "License": "MIT",
+        "Name": "DictAI Popup Guard"
+    },
+    "X-KDE-Ordering": 1,
+    "X-Plasma-API": "javascript"
+}

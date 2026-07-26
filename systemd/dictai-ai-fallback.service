@@ -1,0 +1,14 @@
+[Unit]
+Description=DictAI private Google AI Mode fallback bridge
+After=graphical-session.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-%h/.config/dictai-ai-fallback.env
+ExecStart=/usr/bin/node %h/Dev/dictionary-extension/ai-fallback-server.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

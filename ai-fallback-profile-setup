@@ -1,0 +1,27 @@
+#!/bin/bash
+set -euo pipefail
+
+PROFILE_PATH="${DICTAI_AI_PROFILE:-${XDG_CONFIG_HOME:-$HOME/.config}/chromium-dictai-fallback}"
+CHROME_PATH="${CHROMIUM_BIN:-/usr/bin/google-chrome-stable}"
+AI_MODE_URL="https://www.google.com/search?udm=50&aep=1&ntc=1&cs=1&hl=en-GB"
+
+if [ ! -x "$CHROME_PATH" ]; then
+	echo "Error: Chrome/Chromium was not found at $CHROME_PATH" >&2
+	echo "Set CHROMIUM_BIN to the correct executable and retry." >&2
+	exit 1
+fi
+
+if systemctl --user is-active --quiet dictai-ai-fallback.service; then
+	echo "Stop dictai-ai-fallback.service before opening its persistent profile." >&2
+	exit 1
+fi
+
+echo "A dedicated signed-out DictAI fallback profile will open."
+echo "Do not sign in. Complete Google's cookie prompt and confirm AI Mode works."
+echo "Then close every Chrome window belonging to this profile."
+
+"$CHROME_PATH" \
+	--user-data-dir="$PROFILE_PATH" \
+	--no-first-run \
+	--no-default-browser-check \
+	"$AI_MODE_URL"

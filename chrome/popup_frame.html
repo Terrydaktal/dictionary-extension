@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[DICTAI_HIDDEN] DictAI Definition</title>
+  <script src="popup_copy_guard.js"></script>
+  <link rel="stylesheet" href="popup_frame.css">
+</head>
+<body>
+  <div class="window-container">
+    <header class="window-header">
+      <div class="brand">
+        <svg class="brand-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="24" height="24" rx="6" fill="url(#grad)"/>
+          <path d="M7 6H13C15.2091 6 17 7.79086 17 10C17 12.2091 15.2091 14 13 14H7V6Z" stroke="white" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M7 6V18" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          <defs>
+            <linearGradient id="grad" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#4F46E5"/>
+              <stop offset="1" stop-color="#06B6D4"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <span class="brand-name">DictAI</span>
+        <span class="word-badge" id="word-badge">Definition</span>
+        <span class="source-badge" id="source-badge" hidden></span>
+      </div>
+
+      <div class="search-bar">
+        <input type="text" id="window-search-input" placeholder="Lookup another word..." autocomplete="off">
+        <button id="window-search-btn">Search</button>
+      </div>
+
+      <div class="header-actions">
+        <a id="link-external" href="#" target="_blank" class="icon-btn" title="Open on DictAI.org (new tab)">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <line x1="10" y1="14" x2="21" y2="3"></line>
+          </svg>
+        </a>
+      </div>
+    </header>
+
+    <main class="window-main">
+      <div class="window-loader" id="window-loader">
+        <div class="spinner"></div>
+        <span id="loader-label">Loading definition...</span>
+      </div>
+      <iframe id="frame-content" frameborder="0"></iframe>
+      <article class="ai-content" id="ai-content" style="display:none;">
+        <div class="ai-content-heading">Google AI Mode fallback</div>
+        <div class="ai-definition" id="ai-definition"></div>
+        <div class="ai-actions">
+          <button id="continue-ai-chat" class="continue-ai-button" type="button" hidden>
+            Continue chat in incognito ↗
+          </button>
+        </div>
+        <p class="ai-notice">AI-generated definition. Verify important details.</p>
+      </article>
+      <div class="window-error" id="window-error" style="display:none;">
+        <p id="error-message">Could not load definition preview.</p>
+        <div class="error-actions">
+          <button id="retry-button" class="btn-primary" type="button">Retry</button>
+          <a id="error-link" href="#" target="_blank" class="btn-secondary">Open DictAI Page ↗</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="wiktionary.js"></script>
+  <script src="popup_frame.js"></script>
+</body>
+</html>

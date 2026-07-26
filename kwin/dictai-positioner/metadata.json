@@ -1,0 +1,18 @@
+{
+  "KPackageStructure": "KWin/Script",
+  "KPlugin": {
+    "Name": "DictAI Popup Positioner",
+    "Description": "Positions DictAI Firefox popup windows beside the selected word on Wayland",
+    "Icon": "preferences-system-windows",
+    "Id": "dictai-positioner",
+    "License": "MIT",
+    "Authors": [
+      {
+        "Name": "Terrydaktal",
+        "Email": "9lewis9@gmail.com"
+      }
+    ],
+    "EnabledByDefault": true
+  },
+  "X-Plasma-API": "javascript"
+}
