@@ -177,7 +177,7 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      padding: 22px 26px 30px;
+      padding: 12px 26px 30px;
       background:
         radial-gradient(circle at top right, rgba(255, 255, 255, 0.05), transparent 36%),
         #18181b;

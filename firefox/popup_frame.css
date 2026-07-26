@@ -43,6 +43,10 @@ html, body {
   user-select: none;
 }
 
+body.popup-header-hidden .window-header {
+  display: none;
+}
+
 .brand {
   display: flex;
   align-items: center;

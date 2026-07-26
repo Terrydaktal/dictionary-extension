@@ -17,7 +17,8 @@ const DEFAULT_SETTINGS = {
   popupHeight: 520,
   theme: 'system',
   allowInInputs: false,
-  dictionaryProvider: 'dictai'
+  dictionaryProvider: 'dictai',
+  hidePopupHeader: false
 };
 
 // In-memory definition cache for instant repeat lookups.
@@ -27,6 +28,7 @@ const wiktionaryCache = new Map();
 const pendingWiktionaryFetches = new Map();
 const aiCache = new Map();
 const pendingAiFetches = new Map();
+const aiChatIdsByPopupWindow = new Map();
 const MAX_CACHE_SIZE = 250;
 const PERSISTENT_CACHE_NAME = 'dictai-definitions-v2';
 const PERSISTENT_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -80,6 +82,10 @@ extAPI.runtime.onInstalled.addListener(async (details) => {
   }
 });
 
+extAPI.windows.onRemoved.addListener((windowId) => {
+  releaseAiChatsForPopupWindow(windowId);
+});
+
 // Listener for messages from content script or popup
 extAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !message.action) return false;
@@ -126,12 +132,15 @@ extAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'FETCH_AI_DEFINITION') {
     const word = message.word ? message.word.trim().toLowerCase() : '';
     const promise = fetchAiDefinition(word)
-      .then((result) => {
+      .then(async (result) => {
+        const chatId = result.chatId || '';
+        const chatRegistered =
+          chatId ? await registerAiChatForPopup(sender, chatId) : false;
         const res = {
           success: true,
           source: 'google_ai',
           data: result.definition,
-          chatId: result.chatId || '',
+          chatId: chatRegistered ? chatId : '',
           requestedWord: word,
           resolvedWord: word
         };
@@ -207,7 +216,8 @@ extAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
       viewportInsetY: String(viewportInsetY),
       cursorOffsetX: String(cursorOffsetX),
       cursorOffsetY: String(cursorOffsetY),
-      provider
+      provider,
+      hidePopupHeader: String(message.hidePopupHeader === true)
     });
     const popupUrl = extAPI.runtime.getURL(`popup_frame.html?${popupParams}`);
     const nativePositionMarker =
@@ -909,6 +919,79 @@ async function showAiChat(chatId) {
       'ai_chat_expired',
       response.status
     );
+  }
+}
+
+async function registerAiChatForPopup(sender, chatId) {
+  const windowId =
+    sender && sender.tab && Number.isInteger(sender.tab.windowId)
+      ? sender.tab.windowId
+      : null;
+
+  if (windowId === null) {
+    forgetAiChat(chatId);
+    await closeAiChat(chatId).catch(() => {});
+    return false;
+  }
+
+  try {
+    const popupWindow = await extAPI.windows.get(windowId);
+    if (!popupWindow || popupWindow.type !== 'popup') {
+      throw new Error('AI chat owner is not a standalone popup');
+    }
+  } catch (_) {
+    forgetAiChat(chatId);
+    await closeAiChat(chatId).catch(() => {});
+    return false;
+  }
+
+  let chatIds = aiChatIdsByPopupWindow.get(windowId);
+  if (!chatIds) {
+    chatIds = new Set();
+    aiChatIdsByPopupWindow.set(windowId, chatIds);
+  }
+  chatIds.add(chatId);
+  return true;
+}
+
+function releaseAiChatsForPopupWindow(windowId) {
+  const chatIds = aiChatIdsByPopupWindow.get(windowId);
+  if (!chatIds) return;
+
+  aiChatIdsByPopupWindow.delete(windowId);
+  for (const chatId of chatIds) {
+    forgetAiChat(chatId);
+    closeAiChat(chatId).catch(() => {});
+  }
+}
+
+function forgetAiChat(chatId) {
+  for (const [word, result] of aiCache) {
+    if (result && result.chatId === chatId) {
+      aiCache.delete(word);
+    }
+  }
+}
+
+async function closeAiChat(chatId) {
+  if (!/^[0-9a-f-]{36}$/i.test(chatId)) return;
+
+  const response = await fetchWithTimeout(
+    AI_FALLBACK_URL.replace('/v1/define', '/v1/close-chat'),
+    {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-DictAI-Extension': '1'
+      },
+      body: JSON.stringify({ chatId })
+    },
+    5000
+  );
+
+  if (!response.ok) {
+    throw new LookupError('Could not close the AI Mode conversation', 'ai_error');
   }
 }
 

@@ -9,7 +9,9 @@ effect_dir="${script_dir}/kwin/dictai-popup-guard"
 effect_id="dictai-popup-guard"
 rule_id="dictai-definition-no-focus"
 data_root="${XDG_DATA_HOME:-${HOME}/.local/share}"
+installed_package_dir="${data_root}/kwin/scripts/${package_id}"
 installed_script="${data_root}/kwin/scripts/${package_id}/contents/code/main.js"
+installed_effect_dir="${data_root}/kwin/effects/${effect_id}"
 
 if kpackagetool6 --type KWin/Script --show "${package_id}" >/dev/null 2>&1; then
 	kpackagetool6 --type KWin/Script --upgrade "${package_dir}"
@@ -22,6 +24,18 @@ if kpackagetool6 --type KWin/Effect --show "${effect_id}" >/dev/null 2>&1; then
 else
 	kpackagetool6 --type KWin/Effect --install "${effect_dir}"
 fi
+
+# KPackage installs copies by default. Replace every installed package file
+# with a link to the repository so this checkout remains the single source of
+# truth for the running compositor helpers.
+ln -sfn "${package_dir}/metadata.json" "${installed_package_dir}/metadata.json"
+ln -sfn \
+	"${package_dir}/contents/code/main.js" \
+	"${installed_package_dir}/contents/code/main.js"
+ln -sfn "${effect_dir}/metadata.json" "${installed_effect_dir}/metadata.json"
+ln -sfn \
+	"${effect_dir}/contents/code/main.js" \
+	"${installed_effect_dir}/contents/code/main.js"
 
 kwriteconfig6 \
 	--file kwinrc \

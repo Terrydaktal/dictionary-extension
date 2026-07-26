@@ -4,8 +4,8 @@
 /**
  * Loopback-only Google AI Mode definition bridge.
  *
- * Reuses ~/Dev/chatbot's Puppeteer stack and BrowserAiInterface while keeping
- * dictionary traffic in its own Chromium profile and serialized browser tab.
+ * Reuses ~/Dev/chatbot's installed Puppeteer packages while keeping all
+ * extension-specific browser automation in this repository.
  */
 
 process.env.BROWSER_AI_DEBUG = process.env.BROWSER_AI_DEBUG || '0';
@@ -25,11 +25,7 @@ const StealthPlugin = require(path.join(
   'node_modules',
   'puppeteer-extra-plugin-stealth'
 ));
-const { BrowserAiInterface } = require(path.join(
-  CHATBOT_ROOT,
-  'lib',
-  'browser-ai-interface'
-));
+const { AiModePage } = require('./lib/ai-mode-page');
 
 const puppeteer = addExtra(puppeteerCore);
 puppeteer.use(StealthPlugin());
@@ -194,7 +190,7 @@ class AiModeBridge {
     this.chromeProcess = null;
     this.context = null;
     this.page = null;
-    this.ai = new BrowserAiInterface();
+    this.ai = new AiModePage();
     this.ready = false;
     this.cache = new Map();
     this.chatPages = new Map();
@@ -334,15 +330,27 @@ class AiModeBridge {
   async openConversationTab() {
     const sourcePage =
       [...this.chatPages.values()].find((page) => !page.isClosed()) || this.page;
+    if (this.config.headed) await this.minimizeWindow(sourcePage);
+
     const existingTargets = new Set(this.browser.targets());
     const targetPromise = this.browser.waitForTarget(
       (target) => target.type() === 'page' && !existingTargets.has(target),
       { timeout: 10000 }
     );
 
-    await sourcePage.evaluate(() => {
-      window.open('about:blank', '_blank');
-    });
+    // Creating a tab with page-side window.open() restores and focuses a
+    // minimized Chrome window on Wayland. CDP can create the same page as a
+    // background target without mapping the native window.
+    const browserSession = await this.browser.target().createCDPSession();
+    try {
+      await browserSession.send('Target.createTarget', {
+        url: 'about:blank',
+        background: true,
+      });
+    } finally {
+      await browserSession.detach().catch(() => {});
+    }
+
     const target = await targetPromise;
     const page = await target.page();
     if (!page) throw new Error('Chrome did not create the AI Mode conversation tab');
@@ -421,26 +429,32 @@ class AiModeBridge {
     if (!this.page || this.page.isClosed() || this.chatPages.size > 0) {
       this.page = await this.openConversationTab();
     }
-    const prompt = definitionPrompt(word);
-    // Loading a q= AI Mode URL directly is both faster and more reliable for
-    // signed-out sessions than typing into the empty surface and clicking Send.
-    await this.navigateToFreshAiMode(prompt);
-    await this.dismissGoogleConsent();
-    if (DEBUG) {
-      const diagnostic = await this.page.evaluate(() => ({
-        title: document.title,
-        url: location.href,
-        body: String(document.body && document.body.innerText || '').slice(0, 2000),
-      }));
-      process.stdout.write(`Direct AI Mode diagnostic: ${JSON.stringify(diagnostic)}\n`);
+    if (this.config.headed) await this.minimizeWindow(this.page);
+
+    try {
+      const prompt = definitionPrompt(word);
+      // Loading a q= AI Mode URL directly is both faster and more reliable for
+      // signed-out sessions than typing into the empty surface and clicking Send.
+      await this.navigateToFreshAiMode(prompt);
+      await this.dismissGoogleConsent();
+      if (DEBUG) {
+        const diagnostic = await this.page.evaluate(() => ({
+          title: document.title,
+          url: location.href,
+          body: String(document.body && document.body.innerText || '').slice(0, 2000),
+        }));
+        process.stdout.write(`Direct AI Mode diagnostic: ${JSON.stringify(diagnostic)}\n`);
+      }
+      const definition = await this.waitForDirectResponse(prompt);
+      if (!definition) throw new Error('Google AI Mode returned an empty definition');
+      const chatId = randomUUID();
+      const result = { definition, chatId };
+      this.rememberChat(chatId, this.page);
+      this.remember(word, result);
+      return result;
+    } finally {
+      if (this.config.headed) await this.minimizeWindow(this.page);
     }
-    const definition = await this.waitForDirectResponse(prompt);
-    if (!definition) throw new Error('Google AI Mode returned an empty definition');
-    const chatId = randomUUID();
-    const result = { definition, chatId };
-    this.rememberChat(chatId, this.page);
-    this.remember(word, result);
-    return result;
   }
 
   rememberChat(chatId, page) {
@@ -490,6 +504,31 @@ class AiModeBridge {
     return true;
   }
 
+  async closeChat(chatId) {
+    await this.warmPromise;
+    const page = this.chatPages.get(chatId);
+
+    this.chatPages.delete(chatId);
+    this.chatOrder = this.chatOrder.filter((id) => id !== chatId);
+    for (const [word, result] of this.cache) {
+      if (result && result.chatId === chatId) {
+        this.cache.delete(word);
+      }
+    }
+
+    if (!page || page.isClosed()) return false;
+    if (this.page === page) {
+      const remainingPages = (await this.browser.pages()).filter(
+        (candidate) => candidate !== page && !candidate.isClosed()
+      );
+      this.page =
+        remainingPages[0] ||
+        await this.openConversationTab();
+    }
+    await page.close().catch(() => {});
+    return true;
+  }
+
   async close() {
     this.ready = false;
     if (this.browser) await this.browser.close().catch(() => {});
@@ -533,7 +572,8 @@ async function main() {
 
     const isDefineRequest = request.method === 'POST' && url.pathname === '/v1/define';
     const isShowChatRequest = request.method === 'POST' && url.pathname === '/v1/show-chat';
-    if (!isDefineRequest && !isShowChatRequest) {
+    const isCloseChatRequest = request.method === 'POST' && url.pathname === '/v1/close-chat';
+    if (!isDefineRequest && !isShowChatRequest && !isCloseChatRequest) {
       sendJson(response, 404, { success: false, error: 'Not found' }, origin);
       return;
     }
@@ -548,13 +588,17 @@ async function main() {
 
     try {
       const payload = await readJsonBody(request);
-      if (isShowChatRequest) {
+      if (isShowChatRequest || isCloseChatRequest) {
         const chatId = String(payload.chatId || '').trim();
         if (!/^[0-9a-f-]{36}$/i.test(chatId)) {
           sendJson(response, 400, { success: false, error: 'Invalid chat identifier' }, origin);
           return;
         }
-        await bridge.showChat(chatId);
+        if (isCloseChatRequest) {
+          await bridge.closeChat(chatId);
+        } else {
+          await bridge.showChat(chatId);
+        }
         sendJson(response, 200, { success: true, chatId }, origin);
         return;
       }

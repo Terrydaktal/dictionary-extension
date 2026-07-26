@@ -6,12 +6,18 @@
  */
 
 (() => {
+  const SETTLEMENT_PERIOD_MS = 400;
   const params = new URLSearchParams(window.location.search);
   const selectedWord = (params.get('word') || '').trim();
   if (!selectedWord) return;
 
-  document.addEventListener('copy', (event) => {
+  const handleInitialCopy = (event) => {
     const activeElement = document.activeElement;
+    // Definition documents render inside this iframe. Never replace a copy
+    // originating from an actual definition selection.
+    if (activeElement instanceof HTMLIFrameElement) {
+      return;
+    }
     if (
       activeElement &&
       (activeElement instanceof HTMLInputElement ||
@@ -33,5 +39,12 @@
 
     event.clipboardData.setData('text/plain', selectedWord);
     event.preventDefault();
-  }, true);
+  };
+
+  document.addEventListener('copy', handleInitialCopy, true);
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+      document.removeEventListener('copy', handleInitialCopy, true);
+    }, SETTLEMENT_PERIOD_MS);
+  }, { once: true });
 })();

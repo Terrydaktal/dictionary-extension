@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const providerName = provider === 'wiktionary' ? 'Wiktionary' : 'DictAI';
   const positionX = Number.parseInt(params.get('positionX'), 10);
   const positionY = Number.parseInt(params.get('positionY'), 10);
+  const hidePopupHeader = params.get('hidePopupHeader') === 'true';
   const windowWidth = Number.parseInt(params.get('windowWidth'), 10);
   const windowHeight = Number.parseInt(params.get('windowHeight'), 10);
   const relativeX = Number.parseInt(params.get('relativeX'), 10);
@@ -23,6 +24,21 @@ document.addEventListener('DOMContentLoaded', () => {
   const cursorOffsetY = Number.parseInt(params.get('cursorOffsetY'), 10);
   let normalWindowTitle = `${initialWord} - ${providerName} Definition`;
   let positionMarkerActive = false;
+
+  document.body.classList.toggle('popup-header-hidden', hidePopupHeader);
+
+  try {
+    extAPI.storage.onChanged.addListener((changes) => {
+      if (changes.hidePopupHeader) {
+        document.body.classList.toggle(
+          'popup-header-hidden',
+          changes.hidePopupHeader.newValue === true
+        );
+      }
+    });
+  } catch (_) {
+    // The initial URL parameter still applies if storage events are unavailable.
+  }
 
   if (
     Number.isFinite(positionX) &&

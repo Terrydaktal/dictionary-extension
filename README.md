@@ -34,6 +34,8 @@ dictionary-extension/
 ├── build.py                    # Generates Chrome and Firefox extensions
 ├── install-ai-fallback-service.sh # Installs the per-user AI bridge service
 ├── install-kwin-positioner.sh  # Installs the KWin Wayland positioner
+├── lib/
+│   └── ai-mode-page.js         # Google AI Mode page extraction used by the bridge
 ├── README.md                   # Project documentation
 ├── kwin/
 │   └── dictai-positioner/     # KWin script that places native popup windows
@@ -104,6 +106,7 @@ dictionary-extension/
 - **Description**: Installs and starts the KWin script required to position independent Firefox popup windows on native Wayland.
 - **Input**: Temporary geometry marker placed in the DictAI popup's window title.
 - **Output**: KWin applies the requested screen coordinates and size to the native popup window.
+- **Installed files**: KWin package files under `~/.local/share/kwin/` are symlinks to `kwin/` in this repository.
 - **Execution order**: Run the installer once, then load or reload the Firefox extension.
 
 ### 6. `scripts/update-word-index.py`
@@ -115,7 +118,7 @@ dictionary-extension/
 
 ### 7. `ai-fallback-server.js`
 
-- **Description**: Reuses `~/Dev/chatbot/lib/browser-ai-interface.js` and its Puppeteer dependencies. It keeps one Google AI Mode tab warm, serializes requests, caches repeat definitions in memory, and accepts extension requests only over `127.0.0.1:9235`.
+- **Description**: Uses this repository's `lib/ai-mode-page.js` with the Puppeteer packages installed for `~/Dev/chatbot`. It keeps one Google AI Mode tab warm, serializes requests, caches repeat definitions in memory, and accepts extension requests only over `127.0.0.1:9235`.
 - **Input**: `POST /v1/define` containing `{ "word": "..." }`, or `POST /v1/show-chat` containing the returned chat identifier, from a Firefox or Chrome extension origin.
 - **Output**: JSON containing a plain-text AI-generated definition and temporary chat identifier, or restoration of its incognito AI Mode tab.
 - **Profile**: `~/.config/chromium-dictai-fallback`, separate from both normal Chrome and `~/.config/chromium-chatbot`.
@@ -124,6 +127,7 @@ dictionary-extension/
 
 - **Description**: The installer enables the signed-out incognito bridge as a systemd user service. The profile helper is only needed if Google challenges fresh incognito sessions and opens a separate signed-out persistent profile for cookie setup.
 - **Execution order**: Normally run only `./install-ai-fallback-service.sh`.
+- **Installed unit**: `~/.config/systemd/user/dictai-ai-fallback.service` is a symlink to `systemd/dictai-ai-fallback.service` in this repository.
 
 ---
 

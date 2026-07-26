@@ -31,7 +31,8 @@
     popupHeight: 520,
     theme: 'system',
     allowInInputs: false,
-    dictionaryProvider: 'dictai'
+    dictionaryProvider: 'dictai',
+    hidePopupHeader: false
   };
 
   // Helper for cross-browser messaging (Promise-based for Firefox, callback fallback for Chrome)
@@ -69,6 +70,12 @@
         if (key in settings) {
           settings[key] = newValue;
         }
+      }
+      if (changes.hidePopupHeader && popupElement) {
+        popupElement.classList.toggle(
+          'dictai-header-hidden',
+          changes.hidePopupHeader.newValue === true
+        );
       }
     });
   } catch (e) {
@@ -351,7 +358,8 @@
       viewportInsetY,
       cursorOffsetX,
       cursorOffsetY,
-      provider: settings.dictionaryProvider
+      provider: settings.dictionaryProvider,
+      hidePopupHeader: settings.hidePopupHeader === true
     });
 
     // Never substitute an in-page card for separate-window mode. KWin's
@@ -417,7 +425,9 @@
     hidePopup();
 
     popupElement = document.createElement('div');
-    popupElement.className = `dictai-popup ${getThemeClass()}`;
+    popupElement.className =
+      `dictai-popup ${getThemeClass()}` +
+      (settings.hidePopupHeader ? ' dictai-header-hidden' : '');
     popupElement.setAttribute('role', 'dialog');
     popupElement.setAttribute('aria-label', `Dictionary definition for ${currentWord}`);
 
@@ -827,6 +837,10 @@
         border-bottom: 1px solid rgba(51, 65, 85, 0.8) !important;
       }
 
+      .dictai-popup.dictai-header-hidden .dictai-header {
+        display: none !important;
+      }
+
       .dictai-brand {
         display: flex !important;
         align-items: center !important;
@@ -1045,6 +1059,10 @@
       .dictai-drag-hint {
         font-size: 10px !important;
         opacity: 0.7 !important;
+      }
+
+      .dictai-popup.dictai-header-hidden .dictai-drag-hint {
+        display: none !important;
       }
     `;
   }

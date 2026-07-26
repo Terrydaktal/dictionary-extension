@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const selectProvider = document.getElementById('select-provider');
   const selectTrigger = document.getElementById('select-trigger');
   const selectTheme = document.getElementById('select-theme');
+  const toggleHideHeader = document.getElementById('toggle-hide-header');
   const toggleInputs = document.getElementById('toggle-inputs');
   const inputWidth = document.getElementById('input-width');
   const inputHeight = document.getElementById('input-height');
@@ -29,6 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
       selectProvider.value = s.dictionaryProvider || 'dictai';
       selectTrigger.value = s.triggerMode || 'dblclick';
       selectTheme.value = s.theme || 'system';
+      toggleHideHeader.checked = s.hidePopupHeader === true;
       toggleInputs.checked = s.allowInInputs === true;
       inputWidth.value = s.popupWidth || 480;
       inputHeight.value = s.popupHeight || 520;
@@ -55,6 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
       dictionaryProvider: selectProvider.value,
       triggerMode: selectTrigger.value,
       theme: selectTheme.value,
+      hidePopupHeader: toggleHideHeader.checked,
       allowInInputs: toggleInputs.checked,
       popupWidth: parseInt(inputWidth.value, 10) || 480,
       popupHeight: parseInt(inputHeight.value, 10) || 520
@@ -80,6 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
   selectProvider.addEventListener('change', saveCurrentSettings);
   selectTrigger.addEventListener('change', saveCurrentSettings);
   selectTheme.addEventListener('change', saveCurrentSettings);
+  toggleHideHeader.addEventListener('change', saveCurrentSettings);
   toggleInputs.addEventListener('change', saveCurrentSettings);
   inputWidth.addEventListener('change', saveCurrentSettings);
   inputHeight.addEventListener('change', saveCurrentSettings);
