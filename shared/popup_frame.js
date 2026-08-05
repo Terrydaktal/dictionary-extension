@@ -174,7 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const sequence = ++autoFitSequence;
     autoFitMarkerActive = true;
     document.title =
-      `[DICTAI_AUTOFIT|${verticalAnchor}] ${normalWindowTitle}`;
+      `[DICTAI_AUTOFIT|${verticalAnchor}|${targetHeight}] ${normalWindowTitle}`;
     // Let the native title reach KWin before the browser applies the geometry
     // update; otherwise frameGeometryChanged can race ahead of captionChanged.
     await new Promise((resolve) => {
@@ -188,7 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!positionMarkerActive) {
         document.title = normalWindowTitle;
       }
-    }, 120);
+    }, 250);
   }
 
   function measureFrameDocument(frameDocument) {

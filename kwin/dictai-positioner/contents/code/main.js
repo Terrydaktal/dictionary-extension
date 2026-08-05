@@ -12,7 +12,7 @@ const positionedWindows = new Set();
 const autoFitAnchors = new Map();
 const initialAutoFitAnchors = new Map();
 const hiddenMarker = /\[DICTAI_HIDDEN\]/;
-const autoFitMarker = /\[DICTAI_AUTOFIT\|(top|bottom)\]/;
+const autoFitMarker = /\[DICTAI_AUTOFIT\|(top|bottom)(?:\|(\d+))?\]/;
 const positionMarker =
     /\[DICTAI_POPUP\|(-?\d+)\|(-?\d+)\|(\d+)\|(\d+)\|(-?\d+)\|(-?\d+)\|(\d+)\|(\d+)\|(-?\d+)\|(-?\d+)(?:\|(top|bottom))?\]/;
 const stagingWidth = 137;
@@ -26,6 +26,17 @@ function isSupportedBrowserWindow(window) {
     ).toLowerCase();
     return (
         resourceClass.includes("firefox") ||
+        resourceClass.includes("google-chrome") ||
+        resourceClass.includes("chromium") ||
+        resourceClass.includes("chrome")
+    );
+}
+
+function isChromiumWindow(window) {
+    const resourceClass = String(
+        (window && window.resourceClass) || ""
+    ).toLowerCase();
+    return (
         resourceClass.includes("google-chrome") ||
         resourceClass.includes("chromium") ||
         resourceClass.includes("chrome")
@@ -101,6 +112,29 @@ function preserveAutoFitAnchor(window) {
     window.frameGeometry = geometry;
 }
 
+function applyAutoFitGeometry(window) {
+    const match = autoFitMarker.exec(String((window && window.caption) || ""));
+    const targetHeight = match ? Number(match[2]) : NaN;
+    const anchor = autoFitAnchors.get(window);
+    if (
+        !match ||
+        !Number.isFinite(targetHeight) ||
+        targetHeight <= 0 ||
+        !anchor ||
+        !positionedWindows.has(window)
+    ) {
+        return;
+    }
+
+    const geometry = Object.assign({}, window.frameGeometry);
+    geometry.height = targetHeight;
+    geometry.y =
+        anchor.edge === "bottom"
+            ? anchor.coordinate - targetHeight
+            : anchor.coordinate;
+    window.frameGeometry = geometry;
+}
+
 function pointCoordinate(point, property) {
     const value = point[property];
     return Number(typeof value === "function" ? value.call(point) : value);
@@ -114,6 +148,37 @@ function sameApplication(firstWindow, secondWindow) {
     const firstClass = String(firstWindow.resourceClass || "");
     const secondClass = String(secondWindow.resourceClass || "");
     return firstClass.length > 0 && firstClass === secondClass;
+}
+
+function syncChromeDefinitionLayer(activeWindow) {
+    const keepAboveChrome = isChromiumWindow(activeWindow);
+    for (const candidate of dictAiWindows) {
+        if (isChromiumWindow(candidate) && !candidate.deleted) {
+            candidate.keepAbove = keepAboveChrome;
+        }
+    }
+}
+
+function raiseChromeDefinitionWindows(latestWindow) {
+    if (!isChromiumWindow(latestWindow)) {
+        return;
+    }
+
+    // Clicking another word necessarily raises Chrome's main window, which
+    // otherwise leaves its earlier independent definition windows behind it.
+    // Raise the existing definitions first and the newest one last. This keeps
+    // the group visible without leaving it above non-Chrome applications.
+    syncChromeDefinitionLayer(latestWindow);
+    for (const candidate of dictAiWindows) {
+        if (
+            candidate !== latestWindow &&
+            !candidate.deleted &&
+            sameApplication(candidate, latestWindow)
+        ) {
+            workspace.raiseWindow(candidate);
+        }
+    }
+    workspace.raiseWindow(latestWindow);
 }
 
 function positionDictAiWindow(window, capturedSourceWindow, capturedCursor) {
@@ -202,6 +267,7 @@ function positionDictAiWindow(window, capturedSourceWindow, capturedCursor) {
     ) {
         positionedWindows.add(window);
         window.opacity = 1;
+        raiseChromeDefinitionWindows(window);
         return true;
     }
 
@@ -225,6 +291,7 @@ function positionDictAiWindow(window, capturedSourceWindow, capturedCursor) {
     positionedWindows.add(window);
     window.frameGeometry = geometry;
     window.opacity = 1;
+    raiseChromeDefinitionWindows(window);
     console.info(
         "dictai-positioner: positioned popup at " +
             targetX +
@@ -291,6 +358,7 @@ function watchWindow(window) {
     };
     const captionHandler = function () {
         syncAutoFitAnchor(window);
+        applyAutoFitGeometry(window);
         handleDictAiWindow(window, sourceWindow, capturedCursor);
     };
     const geometryHandler = function () {
@@ -328,12 +396,14 @@ function watchWindow(window) {
     }
 
     syncAutoFitAnchor(window);
+    applyAutoFitGeometry(window);
     handleDictAiWindow(window, sourceWindow, capturedCursor);
 }
 
 workspace.windowList().forEach(watchWindow);
 workspace.windowAdded.connect(watchWindow);
 workspace.windowActivated.connect(function (window) {
+    syncChromeDefinitionLayer(window);
     if (!window) {
         return;
     }
